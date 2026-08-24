@@ -1,0 +1,53 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Build Deployment Images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Backend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/backend.Dockerfile
+          push: false
+          tags: sales-forecasting-backend:latest
+
+      - name: Build Frontend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/frontend.Dockerfile
+          push: false
+          tags: sales-forecasting-frontend:latest
+
+      - name: Build ML Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/ml.Dockerfile
+          push: false
+          tags: sales-forecasting-ml:latest
+
+      - name: Build RAG Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/rag.Dockerfile
+          push: false
+          tags: sales-forecasting-rag:latest
+
+      - name: Deployment build completed
+        run: echo "All deployment images built successfully."
