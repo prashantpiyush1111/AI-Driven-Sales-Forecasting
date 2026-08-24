@@ -2,12 +2,7 @@ name: Security Scan
 
 on:
   push:
-    branches:
-      - backend
-
   pull_request:
-    branches:
-      - main
 
 jobs:
   security:

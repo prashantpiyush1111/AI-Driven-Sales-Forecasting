@@ -2,20 +2,7 @@ name: ML CI
 
 on:
   push:
-    branches:
-      - backend
-    paths:
-      - 'ml-service/**'
-      - 'ml-pipeline/**'
-      - '.github/workflows/ml-ci.yml'
-
   pull_request:
-    branches:
-      - main
-    paths:
-      - 'ml-service/**'
-      - 'ml-pipeline/**'
-      - '.github/workflows/ml-ci.yml'
 
 jobs:
   python-check:
