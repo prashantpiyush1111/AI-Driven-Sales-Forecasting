@@ -1,0 +1,469 @@
+# =========================================================
+# ENVIRONMENT VARIABLES & SECRETS
+# =========================================================
+
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
+secrets/
+secret/
+credentials/
+credentials.json
+
+
+# =========================================================
+# JAVA / SPRING BOOT / MAVEN
+# =========================================================
+
+**/target/
+**/out/
+**/build/
+
+*.class
+*.jar
+*.war
+*.ear
+
+*.log
+
+.mvn/timing.properties
+
+
+# =========================================================
+# GRADLE (IF USED IN FUTURE)
+# =========================================================
+
+.gradle/
+**/build/
+
+!gradle/wrapper/gradle-wrapper.jar
+
+
+# =========================================================
+# NODE.JS / REACT / VITE
+# =========================================================
+
+**/node_modules/
+**/.npm/
+**/.yarn/
+**/.pnpm-store/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+**/dist/
+**/build/
+**/.vite/
+
+.npmrc
+
+
+# =========================================================
+# JAVASCRIPT / TYPESCRIPT CACHE
+# =========================================================
+
+*.tsbuildinfo
+.eslintcache
+
+
+# =========================================================
+# PYTHON
+# =========================================================
+
+__pycache__/
+**/__pycache__/
+
+*.py[cod]
+*$py.class
+
+*.pyo
+*.pyd
+
+.venv/
+venv/
+env/
+ENV/
+
+**/.venv/
+**/venv/
+**/env/
+
+.python-version
+
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+
+# =========================================================
+# PYTHON TESTING / COVERAGE
+# =========================================================
+
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.ruff_cache/
+
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+coverage.xml
+pytestdebug.log
+
+
+# =========================================================
+# MACHINE LEARNING MODELS
+# =========================================================
+
+*.pkl
+*.pickle
+*.joblib
+
+*.h5
+*.hdf5
+
+*.onnx
+
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+models/
+model/
+checkpoints/
+
+
+# =========================================================
+# DATASETS / LARGE DATA FILES
+# =========================================================
+
+*.csv
+*.tsv
+*.parquet
+*.jsonl
+
+*.xlsx
+*.xls
+
+*.zip
+*.7z
+*.tar
+*.tar.gz
+
+data/raw/
+data/processed/
+data/interim/
+
+datasets/
+raw-data/
+processed-data/
+
+
+# =========================================================
+# DVC
+# =========================================================
+
+.dvc/cache/
+
+# Keep DVC metadata files
+!.dvc/
+!.dvc/config
+
+# If DVC cache/data directories are created
+**/.dvc/cache/
+
+
+# =========================================================
+# DATABASE FILES / BACKUPS
+# =========================================================
+
+*.db
+*.sqlite
+*.sqlite3
+
+*.sql.gz
+*.dump
+*.bak
+
+database/backups/
+backups/
+
+
+# =========================================================
+# LOGS
+# =========================================================
+
+logs/
+log/
+
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
+# =========================================================
+# TEMPORARY FILES
+# =========================================================
+
+*.tmp
+*.temp
+*.swp
+*.swo
+*.swn
+
+*.bak
+*.old
+
+~$*
+*.orig
+
+
+# =========================================================
+# CACHE
+# =========================================================
+
+.cache/
+.cache-loader/
+.parcel-cache/
+.next/
+.nuxt/
+.svelte-kit/
+
+**/.cache/
+
+
+# =========================================================
+# VS CODE
+# =========================================================
+
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+.history/
+
+
+# =========================================================
+# INTELLIJ / ECLIPSE / JAVA IDE
+# =========================================================
+
+.idea/
+*.iml
+*.iws
+*.ipr
+
+.classpath
+.project
+.settings/
+.factorypath
+
+
+# =========================================================
+# WINDOWS
+# =========================================================
+
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+
+Desktop.ini
+
+$RECYCLE.BIN/
+
+
+# =========================================================
+# MACOS
+# =========================================================
+
+.DS_Store
+.AppleDouble
+.LSOverride
+
+._*
+
+.Spotlight-V100
+.Trashes
+
+
+# =========================================================
+# LINUX
+# =========================================================
+
+*~
+.directory
+
+
+# =========================================================
+# DOCKER
+# =========================================================
+
+docker-compose.override.yml
+
+# Local Docker environment
+.docker/
+
+# Docker volumes
+docker-volumes/
+volumes/
+
+
+# =========================================================
+# KUBERNETES / LOCAL CLUSTER
+# =========================================================
+
+.kube/
+
+# Local Kubernetes generated files
+kubernetes/.cache/
+kubernetes/local/
+
+
+# =========================================================
+# TERRAFORM / INFRASTRUCTURE
+# =========================================================
+
+.terraform/
+.terraform.lock.hcl
+
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+override.tf
+override.tf.json
+
+*_override.tf
+*_override.tf.json
+
+
+# =========================================================
+# ANSIBLE
+# =========================================================
+
+*.retry
+
+
+# =========================================================
+# TEST / REPORT OUTPUT
+# =========================================================
+
+test-results/
+test-results/**
+reports/
+coverage/
+screenshots/
+
+
+# =========================================================
+# SECURITY SCANNING OUTPUT
+# =========================================================
+
+security-reports/
+security-results/
+*.sarif
+
+
+# =========================================================
+# GENERATED FILES
+# =========================================================
+
+generated/
+generated-files/
+
+*.generated.*
+*.min.js
+*.min.css
+
+
+# =========================================================
+# FRONTEND LOCAL CONFIG
+# =========================================================
+
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+
+# =========================================================
+# PYTHON LOCAL CONFIG
+# =========================================================
+
+.pytest_cache/
+.ipynb_checkpoints/
+
+
+# =========================================================
+# JUPYTER
+# =========================================================
+
+.ipynb_checkpoints/
+
+
+# =========================================================
+# ML EXPERIMENT TRACKING
+# =========================================================
+
+mlruns/
+wandb/
+.wandb/
+neptune/
+
+
+# =========================================================
+# AIRFLOW / PIPELINE LOCAL FILES
+# =========================================================
+
+airflow/logs/
+airflow/.local/
+
+
+# =========================================================
+# FEATURE STORE / LOCAL ARTIFACTS
+# =========================================================
+
+feature-store/data/
+feature-store/.cache/
+
+
+# =========================================================
+# LOCAL DEVELOPMENT FILES
+# =========================================================
+
+local/
+.local/
+tmp/
+temp/
+
+
+# =========================================================
+# OS / EDITOR BACKUP
+# =========================================================
+
+*.swp
+*.swo
+*.swn
+*.orig
+*.rej
