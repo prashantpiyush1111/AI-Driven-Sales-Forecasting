@@ -9,23 +9,46 @@ Purpose : Clean raw CSV files, melt sales into time-series format,
 
 import os
 import gc
+import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-# STEP 1: Dynamic Path Resolution (Works everywhere)
+
+# STEP 1: Dynamic Path Resolution
 def get_paths():
     """Finds raw data folder and feature-store directory dynamically."""
     script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parents[1]  
+    
+    # Locate project root (look for marker files/directories like feature-store or ml-pipeline)
+    current = script_dir
+    project_root = None
+    while current.parent != current:
+        if (current / "feature-store").exists() or (current / "ml-pipeline").exists():
+            project_root = current
+            break
+        current = current.parent
+    
+    if project_root is None:
+        project_root = script_dir.parents[1]
 
     # Check potential raw data locations
     candidates = [
         project_root / "m5-forecasting-accuracy (walmart data)",
-        script_dir.parents[2] / "m5-forecasting-accuracy (walmart data)",
-        Path("../m5-forecasting-accuracy (walmart data)"),
+        project_root / "m5_data",
+        project_root / "data" / "raw",
+        project_root / "data",
+        script_dir.parents[1] / "m5-forecasting-accuracy (walmart data)",
+        Path.cwd() / "m5-forecasting-accuracy (walmart data)",
     ]
+    
     data_in = None
     for p in candidates:
         if p.exists() and (p / "calendar.csv").exists():
@@ -33,12 +56,14 @@ def get_paths():
             break
 
     if not data_in:
-        raise FileNotFoundError("Raw data directory 'm5-forecasting-accuracy (walmart data)' not found.")
+        searched_paths = "\n - ".join(str(p.resolve()) for p in candidates)
+        raise FileNotFoundError(
+            f"Raw data directory containing 'calendar.csv' not found.\nSearched candidate locations:\n - {searched_paths}"
+        )
 
     # Output directory in feature-store
-    data_out = (project_root / "AI-Driven-Sales-Forecasting" / "feature-store" / "data").resolve()
-    if not data_out.parent.exists():
-        data_out = (script_dir.parents[1] / "feature-store" / "data").resolve()
+    data_out = (project_root / "feature-store" / "data").resolve()
+    data_out.mkdir(parents=True, exist_ok=True)
 
     return data_in, data_out
 
@@ -53,53 +78,75 @@ def run_sales_pipeline(days_window: int = 100):
                      to maintain ultra-fast execution and optimal memory usage.
     """
     data_in, data_out = get_paths()
-    print("=" * 65)
-    print("  AI-DRIVEN SALES FORECASTING - DATA PIPELINE")
-    print("=" * 65)
-    print(f"[*] Input Data Folder  : {data_in}")
-    print(f"[*] Output Data Folder : {data_out}")
-
+    logger.info("=" * 65)
+    logger.info("  AI-DRIVEN SALES FORECASTING - DATA PIPELINE")
+    logger.info("=" * 65)
+    logger.info(f"[*] Input Data Folder  : {data_in}")
+    logger.info(f"[*] Output Data Folder : {data_out}")
 
     # 2.1 Load Raw CSV Data
-    print("\n[Step 1/6] Loading raw CSV files...")
-    calendar = pd.read_csv(data_in / "calendar.csv")
-    prices = pd.read_csv(data_in / "sell_prices.csv")
-    
+    logger.info("[Step 1/6] Loading raw CSV files...")
+    try:
+        calendar = pd.read_csv(data_in / "calendar.csv")
+    except Exception as e:
+        raise FileNotFoundError(f"Failed to read 'calendar.csv' from {data_in}: {e}") from e
+
+    try:
+        prices = pd.read_csv(data_in / "sell_prices.csv")
+    except Exception as e:
+        raise FileNotFoundError(f"Failed to read 'sell_prices.csv' from {data_in}: {e}") from e
+
     sales_file = "sales_train_evaluation.csv" if (data_in / "sales_train_evaluation.csv").exists() else "sales_train_validation.csv"
-    sales = pd.read_csv(data_in / sales_file)
-    print(f"    Loaded {len(sales):,} products, {len(calendar):,} calendar dates, {len(prices):,} price entries.")
+    try:
+        sales = pd.read_csv(data_in / sales_file)
+    except Exception as e:
+        raise FileNotFoundError(f"Failed to read sales file '{sales_file}' from {data_in}: {e}") from e
+
+    logger.info(f"    Loaded {len(sales):,} products, {len(calendar):,} calendar dates, {len(prices):,} price entries.")
 
     # 2.2 Clean & Prepare Calendar Data
-    print("\n[Step 2/6] Cleaning Calendar & Extracting Date Features...")
+    logger.info("[Step 2/6] Cleaning Calendar & Extracting Date Features...")
     calendar["date"] = pd.to_datetime(calendar["date"])
     
     # Extract temporal indicators
     calendar["day"] = calendar["date"].dt.day.astype(np.int8)
     calendar["month"] = calendar["date"].dt.month.astype(np.int8)
     calendar["year"] = calendar["date"].dt.year.astype(np.int16)
-    calendar["is_weekend"] = calendar["wday"].isin([1, 2]).astype(np.int8)  # 1: Sat, 2: Sun
+    
+    # Weekend indicator (Saturday & Sunday)
+    calendar["is_weekend"] = calendar["date"].dt.dayofweek.isin([5, 6]).astype(np.int8)
     
     # Event handling
     calendar["has_event"] = (~calendar["event_name_1"].isnull()).astype(np.int8)
     
     # Optimize SNAP columns
     for snap_col in ["snap_CA", "snap_TX", "snap_WI"]:
-        calendar[snap_col] = calendar[snap_col].fillna(0).astype(np.int8)
+        if snap_col in calendar.columns:
+            calendar[snap_col] = calendar[snap_col].fillna(0).astype(np.int8)
+        else:
+            calendar[snap_col] = 0
 
     # Keep only essential calendar columns
     selected_calendar_cols = [
         "d", "date", "wm_yr_wk", "wday", "day", "month", "year", 
         "is_weekend", "has_event", "snap_CA", "snap_TX", "snap_WI"
     ]
-    calendar_clean = calendar[selected_calendar_cols].copy()
+    calendar_clean = calendar[[col for col in selected_calendar_cols if col in calendar.columns]].copy()
     del calendar
     gc.collect()
 
     # 2.3 Reshape (Melt) Sales: Wide -> Time-Series Long Format
-    print(f"\n[Step 3/6] Reshaping sales data (Last {days_window} days: d_{1942 - days_window} to d_1941)...")
-    start_d = 1942 - days_window
-    day_cols = [f"d_{i}" for i in range(start_d, 1942) if f"d_{i}" in sales.columns]
-    id_cols = ["id", "item_id", "dept_id", "cat_id", "store_id", "state_id"]
+    d_cols_all = [c for c in sales.columns if c.startswith("d_") and c[2:].isdigit()]
+    if not d_cols_all:
+        raise ValueError("No sales day columns (e.g., 'd_1', 'd_2', ...) found in sales file.")
+    
+    d_numbers = sorted([int(c.split("_")[1]) for c in d_cols_all])
+    max_day = d_numbers[-1]
+    start_day = max(d_numbers[0], max_day - days_window + 1)
+    day_cols = [f"d_{i}" for i in range(start_day, max_day + 1) if f"d_{i}" in sales.columns]
+    
+    logger.info(f"[Step 3/6] Reshaping sales data (Last {len(day_cols)} days: d_{start_day} to d_{max_day})...")
+    id_cols = [c for c in ["id", "item_id", "dept_id", "cat_id", "store_id", "state_id"] if c in sales.columns]
 
     sales_melted = pd.melt(
         sales[id_cols + day_cols],
@@ -122,7 +169,7 @@ def run_sales_pipeline(days_window: int = 100):
         sales_melted[col] = sales_melted[col].astype("category")
 
     # 2.4 Merge Sales with Calendar and Sell Prices
-    print("\n[Step 4/6] Merging Sales, Calendar, and Prices...")
+    logger.info("[Step 4/6] Merging Sales, Calendar, and Prices...")
 
     # Merge Calendar on 'd'
     merged = pd.merge(sales_melted, calendar_clean, on="d", how="left")
@@ -142,9 +189,8 @@ def run_sales_pipeline(days_window: int = 100):
     # Impute missing prices with 0.0
     merged["sell_price"] = merged["sell_price"].fillna(0.0).astype(np.float32)
 
-
     # 2.5 Feature Engineering (Revenue, Lags & Rolling Averages)
-    print("\n[Step 5/6] Generating ML Features (Revenue, Lag_7, Rolling_Mean_7)...")
+    logger.info("[Step 5/6] Generating ML Features (Revenue, Lag_7, Rolling_Mean_7)...")
     
     # 1. Revenue feature
     merged["revenue"] = (merged["sales"] * merged["sell_price"]).astype(np.float32)
@@ -153,32 +199,37 @@ def run_sales_pipeline(days_window: int = 100):
     merged = merged.sort_values(["id", "date"]).reset_index(drop=True)
 
     # 3. Lag_7 feature: Sales from 7 days ago (weekly seasonality)
-    merged["lag_7_sales"] = merged.groupby("id", observed=False)["sales"].shift(7).astype(np.float32)
+    merged["lag_7_sales"] = (
+        merged.groupby("id", observed=False)["sales"]
+        .shift(7)
+        .fillna(0.0)
+        .astype(np.float32)
+    )
 
     # 4. Rolling Mean 7: Average sales over past 7 days (trend feature)
     merged["rolling_mean_7"] = (
         merged.groupby("id", observed=False)["sales"]
         .transform(lambda x: x.shift(1).rolling(window=7, min_periods=1).mean())
+        .fillna(0.0)
         .astype(np.float32)
     )
 
     # 2.6 Save to Feature Store
-    print("\n[Step 6/6] Saving Processed Data to Feature Store...")
-    data_out.mkdir(parents=True, exist_ok=True)
+    logger.info("[Step 6/6] Saving Processed Data to Feature Store...")
     
     parquet_path = data_out / "processed_m5_sales.parquet"
     try:
         merged.to_parquet(parquet_path, index=False)
-        print(f"    [SUCCESS] Saved Parquet: {parquet_path}")
+        logger.info(f"    [SUCCESS] Saved Parquet: {parquet_path}")
     except Exception as e:
         csv_path = data_out / "processed_m5_sales.csv"
         merged.to_csv(csv_path, index=False)
-        print(f"    [SUCCESS] Saved CSV: {csv_path} (Reason: {e})")
+        logger.info(f"    [SUCCESS] Saved CSV: {csv_path} (Reason: {e})")
 
-    print("\n" + "=" * 65)
-    print(f"  PIPELINE COMPLETE! Total Clean Records: {len(merged):,}")
-    print(f"  Memory Footprint: {merged.memory_usage().sum() / 1024**2:.2f} MB")
-    print("=" * 65)
+    logger.info("=" * 65)
+    logger.info(f"  PIPELINE COMPLETE! Total Clean Records: {len(merged):,}")
+    logger.info(f"  Memory Footprint: {merged.memory_usage().sum() / 1024**2:.2f} MB")
+    logger.info("=" * 65)
 
     return merged
 
@@ -187,9 +238,10 @@ def run_sales_pipeline(days_window: int = 100):
 if __name__ == "__main__":
     df_clean = run_sales_pipeline(days_window=100)
 
-    print("\n--- SAMPLE CLEANED DATA (First 5 Rows) ---")
+    print("\n--- SAMPLE CLEANED DATA (First 10 Rows) ---")
     preview_cols = [
         "id", "date", "sales", "sell_price", "revenue", 
         "lag_7_sales", "rolling_mean_7", "is_weekend", "snap_CA"
     ]
-    print(df_clean[preview_cols].head(10).to_string())
+    avail_cols = [c for c in preview_cols if c in df_clean.columns]
+    print(df_clean[avail_cols].head(10).to_string())
