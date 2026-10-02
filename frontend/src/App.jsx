@@ -158,13 +158,13 @@ const totalOrders = filteredData.reduce(
 
         <div className="stat-card">
           <h3>Total Sales</h3>
-          <p>₹1,25,000</p>
+          <p>₹{totalSales.toLocaleString("en-IN")}</p>
           <span>+12.5% from last month</span>
         </div>
 
         <div className="stat-card">
           <h3>Total Orders</h3>
-          <p>1,250</p>
+          <p>{totalOrders.toLocaleString("en-IN")}</p>
           <span>+8.2% from last month</span>
         </div>
 
