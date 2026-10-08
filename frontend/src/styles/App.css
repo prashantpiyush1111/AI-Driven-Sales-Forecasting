@@ -105,7 +105,7 @@ body {
 
 .stats-container {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 20px;
 }
 
@@ -114,6 +114,12 @@ body {
   padding: 25px;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
 }
 
 .stat-card h3 {
@@ -125,6 +131,7 @@ body {
 .stat-card p {
   font-size: 28px;
   font-weight: bold;
+  margin-bottom: 8px;
 }
 
 /* Responsive */
@@ -205,4 +212,47 @@ body {
   .summary-container {
     grid-template-columns: 1fr;
   }
+}
+.filter-container {
+  flex-direction: column;
+}
+
+/* Dashboard Filters */
+
+.filter-container {
+  display: flex;
+  gap: 20px;
+  background: white;
+  padding: 20px;
+  margin-bottom: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.filter-group label {
+  font-size: 14px;
+  font-weight: bold;
+  color: #374151;
+}
+
+.filter-group select {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  background: white;
+  color: #1f2937;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.filter-group select:focus {
+  outline: none;
+  border-color: #6b7280;
 }
