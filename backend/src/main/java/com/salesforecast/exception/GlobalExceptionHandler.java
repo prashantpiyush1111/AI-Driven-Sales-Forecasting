@@ -3,16 +3,21 @@ package com.salesforecast.exception;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -55,6 +60,42 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiError> handleUnreadableBody(HttpMessageNotReadableException ex, HttpServletRequest request) {
         return build(HttpStatus.BAD_REQUEST, "Malformed or unreadable request body", request, null);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex,
+                                                       HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST,
+                "Invalid value for parameter '" + ex.getName() + "'", request, null);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiError> handleMissingParameter(MissingServletRequestParameterException ex,
+                                                           HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST,
+                "Missing required parameter '" + ex.getParameterName() + "'", request, null);
+    }
+
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ApiError> handleInvalidProperty(PropertyReferenceException ex,
+                                                          HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST,
+                "Invalid sort property '" + ex.getPropertyName() + "'", request, null);
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiError> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException ex,
+                                                               HttpServletRequest request) {
+        return build(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "Unsupported content type. Use application/json", request, null);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex,
+                                                        HttpServletRequest request) {
+        log.warn("Data integrity violation on {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage());
+        return build(HttpStatus.CONFLICT,
+                "Request conflicts with existing data or violates a data constraint", request, null);
     }
 
     @ExceptionHandler(AuthenticationException.class)
