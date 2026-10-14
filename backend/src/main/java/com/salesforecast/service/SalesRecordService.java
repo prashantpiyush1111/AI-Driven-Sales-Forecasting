@@ -2,14 +2,20 @@ package com.salesforecast.service;
 
 import com.salesforecast.dto.request.SalesRecordRequest;
 import com.salesforecast.dto.response.SalesRecordResponse;
+import com.salesforecast.dto.response.SalesSummaryResponse;
 import com.salesforecast.entity.SalesRecord;
+import com.salesforecast.exception.BadRequestException;
 import com.salesforecast.exception.ResourceNotFoundException;
 import com.salesforecast.repository.SalesRecordRepository;
+import com.salesforecast.repository.SalesSummaryView;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Service
 @RequiredArgsConstructor
@@ -20,8 +26,24 @@ public class SalesRecordService {
 
     private final SalesRecordRepository salesRecordRepository;
 
-    public Page<SalesRecordResponse> getAll(Pageable pageable) {
-        return salesRecordRepository.findAll(pageable).map(this::toResponse);
+    public Page<SalesRecordResponse> search(String productName, String category, String region,
+                                            LocalDate from, LocalDate to, Pageable pageable) {
+        validateDateRange(from, to);
+        return salesRecordRepository
+                .search(clean(productName), clean(category), clean(region), from, to, pageable)
+                .map(this::toResponse);
+    }
+
+    public SalesSummaryResponse summarize(String productName, String category, String region,
+                                          LocalDate from, LocalDate to) {
+        validateDateRange(from, to);
+        SalesSummaryView view = salesRecordRepository
+                .summarize(clean(productName), clean(category), clean(region), from, to);
+
+        long totalQuantity = view.getTotalQuantity() != null ? view.getTotalQuantity() : 0L;
+        BigDecimal totalRevenue = view.getTotalRevenue() != null ? view.getTotalRevenue() : BigDecimal.ZERO;
+        long recordCount = view.getRecordCount() != null ? view.getRecordCount() : 0L;
+        return new SalesSummaryResponse(totalQuantity, totalRevenue, recordCount);
     }
 
     public SalesRecordResponse getById(Long id) {
@@ -48,6 +70,20 @@ public class SalesRecordService {
             throw new ResourceNotFoundException(RESOURCE_NAME, id);
         }
         salesRecordRepository.deleteById(id);
+    }
+
+    private void validateDateRange(LocalDate from, LocalDate to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new BadRequestException("'from' date cannot be after 'to' date");
+        }
+    }
+
+    private String clean(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private SalesRecord findOrThrow(Long id) {
