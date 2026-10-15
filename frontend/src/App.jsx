@@ -19,6 +19,9 @@ import {
 
 import { Line } from "react-chartjs-2";
 
+import Forecast from "./Pages/Forecast";
+
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -98,6 +101,11 @@ const totalOrders = filteredData.reduce(
   0
 );
 
+const forecastedSales = Math.round(totalSales * 1.2);
+
+const averageOrderValue =
+  totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0;
+
   return (
 
     <div className="dashboard">
@@ -170,13 +178,13 @@ const totalOrders = filteredData.reduce(
 
         <div className="stat-card">
           <h3>Forecasted Sales</h3>
-          <p>₹1,50,000</p>
+          <p>₹{forecastedSales.toLocaleString("en-IN")}</p>
           <span>Next month prediction</span>
         </div>
 
         <div className="stat-card">
           <h3>Average Order Value</h3>
-          <p>₹1,000</p>
+          <p>₹{averageOrderValue.toLocaleString("en-IN")}</p>
           <span>+5.4% from last month</span>
         </div>
 
@@ -253,15 +261,6 @@ function Sales() {
     <div className="dashboard">
       <h1>Sales</h1>
       <p>Sales data and transactions will appear here.</p>
-    </div>
-  );
-}
-
-function Forecast() {
-  return (
-    <div className="dashboard">
-      <h1>Sales Forecast</h1>
-      <p>AI-based sales predictions will appear here.</p>
     </div>
   );
 }
