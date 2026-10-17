@@ -1,0 +1,451 @@
+openapi: 3.0.3
+info:
+  title: AI-Driven Sales Forecasting - Backend API
+  version: 1.0.0
+  description: >
+    Spring Boot backend. All endpoints except /api/auth/** need
+    `Authorization: Bearer <jwt>`. Error responses use the ApiError shape.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+  - name: Sales
+  - name: Forecasts
+
+paths:
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user (role is always USER)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: Username or email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and get a JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid username or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/sales:
+    get:
+      tags: [Sales]
+      summary: Search sales records (paginated, all filters optional)
+      parameters:
+        - $ref: '#/components/parameters/ProductName'
+        - $ref: '#/components/parameters/Category'
+        - $ref: '#/components/parameters/Region'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          description: Page size (default 20, server max 2000)
+          schema: { type: integer, minimum: 1, default: 20 }
+        - name: sort
+          in: query
+          description: "Format `property,direction`. Default `saleDate,desc`."
+          schema: { type: string, example: 'saleDate,desc' }
+      responses:
+        '200':
+          description: Page of sales records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesRecordPage'
+        '400':
+          description: Invalid date range, date format or sort property
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Sales]
+      summary: Create a sales record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SalesRecordRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesRecordResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/sales/summary:
+    get:
+      tags: [Sales]
+      summary: Totals for the same filters as the search endpoint
+      parameters:
+        - $ref: '#/components/parameters/ProductName'
+        - $ref: '#/components/parameters/Category'
+        - $ref: '#/components/parameters/Region'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: Aggregates (zeros when nothing matches)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesSummaryResponse'
+        '400':
+          description: Invalid date range or date format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/sales/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      tags: [Sales]
+      summary: Get one sales record
+      responses:
+        '200':
+          description: Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesRecordResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Sales]
+      summary: Update a sales record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SalesRecordRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesRecordResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Sales]
+      summary: Delete a sales record (ADMIN only)
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Caller is not ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/forecasts:
+    post:
+      tags: [Forecasts]
+      summary: Generate a forecast via the ML service and store it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForecastRequest'
+      responses:
+        '201':
+          description: Forecast generated and saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecastResponse'
+        '400':
+          description: Validation failed (blank product, missing or past date)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '502':
+          description: ML service returned an empty or incomplete response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: ML service is unreachable or timed out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/forecasts/{productName}:
+    get:
+      tags: [Forecasts]
+      summary: All stored forecasts for a product
+      parameters:
+        - $ref: '#/components/parameters/ProductNamePath'
+      responses:
+        '200':
+          description: List of forecasts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ForecastResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/forecasts/{productName}/latest:
+    get:
+      tags: [Forecasts]
+      summary: Most recent forecast for a product
+      parameters:
+        - $ref: '#/components/parameters/ProductNamePath'
+      responses:
+        '200':
+          description: Latest forecast
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecastResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ProductName:
+      name: productName
+      in: query
+      schema: { type: string }
+    Category:
+      name: category
+      in: query
+      schema: { type: string }
+    Region:
+      name: region
+      in: query
+      schema: { type: string }
+    From:
+      name: from
+      in: query
+      description: Inclusive start date (ISO yyyy-MM-dd)
+      schema: { type: string, format: date }
+    To:
+      name: to
+      in: query
+      description: Inclusive end date (ISO yyyy-MM-dd)
+      schema: { type: string, format: date }
+    ProductNamePath:
+      name: productName
+      in: path
+      required: true
+      description: URL-encoded product name, e.g. Laptop%20Pro%2015
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT (empty response body)
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    ValidationError:
+      description: Validation failed; see fieldErrors
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username: { type: string, minLength: 3, maxLength: 50 }
+        email: { type: string, format: email, maxLength: 150 }
+        password: { type: string, minLength: 6, maxLength: 72 }
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, maxLength: 100 }
+        password: { type: string, maxLength: 72 }
+
+    AuthResponse:
+      type: object
+      properties:
+        token: { type: string }
+        tokenType: { type: string, example: Bearer }
+        userId: { type: integer, format: int64 }
+        username: { type: string }
+        role: { type: string, enum: [USER, ADMIN] }
+
+    SalesRecordRequest:
+      type: object
+      required: [productName, quantity, revenue, saleDate]
+      properties:
+        productName: { type: string, maxLength: 150 }
+        category: { type: string, maxLength: 100 }
+        region: { type: string, maxLength: 100 }
+        quantity: { type: integer, minimum: 0 }
+        revenue:
+          type: number
+          minimum: 0
+          description: Up to 13 integer digits and 2 decimal places
+        saleDate: { type: string, format: date }
+
+    SalesRecordResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        productName: { type: string }
+        category: { type: string, nullable: true }
+        region: { type: string, nullable: true }
+        quantity: { type: integer }
+        revenue: { type: number }
+        saleDate: { type: string, format: date }
+        createdAt: { type: string, format: date-time }
+
+    SalesRecordPage:
+      type: object
+      description: Spring Data page (main fields shown)
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/SalesRecordResponse'
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+        number: { type: integer, description: Current page (0-based) }
+        size: { type: integer }
+        first: { type: boolean }
+        last: { type: boolean }
+        empty: { type: boolean }
+
+    SalesSummaryResponse:
+      type: object
+      properties:
+        totalQuantity: { type: integer, format: int64 }
+        totalRevenue: { type: number }
+        recordCount: { type: integer, format: int64 }
+
+    ForecastRequest:
+      type: object
+      required: [productName, forecastDate]
+      properties:
+        productName: { type: string, maxLength: 150 }
+        forecastDate:
+          type: string
+          format: date
+          description: Today or a future date
+
+    ForecastResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        productName: { type: string }
+        forecastDate: { type: string, format: date }
+        predictedQuantity: { type: integer }
+        predictedRevenue: { type: number }
+        confidenceScore: { type: number }
+        modelVersion: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    ApiError:
+      type: object
+      properties:
+        timestamp: { type: string, format: date-time }
+        status: { type: integer }
+        error: { type: string, example: Bad Request }
+        message: { type: string }
+        path: { type: string }
+        fieldErrors:
+          type: object
+          additionalProperties: { type: string }
+          description: Present only for validation errors
