@@ -1,0 +1,45 @@
+# Local stack: MySQL + backend.
+# Run from infra/compose after creating a .env file (see .env.example):
+#   docker compose up --build
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: sales-forecast-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: sales_forecast_db
+      MYSQL_USER: ${DB_USERNAME:?Set DB_USERNAME in .env}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # No published port: only the backend container needs to reach MySQL.
+    # This avoids clashing with a MySQL already running on the host (3306).
+
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: ../infra/docker/backend.Dockerfile
+    container_name: sales-forecast-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/sales_forecast_db
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (at least 32 characters)}
+      ML_SERVICE_URL: ${ML_SERVICE_URL:-http://host.docker.internal:8000}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    ports:
+      - "8080:8080"
+
+volumes:
+  mysql_data:
