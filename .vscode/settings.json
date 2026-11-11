@@ -1,3 +1,7 @@
 {
-    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe"
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/.venv/Lib/site-packages",
+        "C:/Users/Sagar/AppData/Local/Programs/Python/Python312/Lib/site-packages"
+    ]
 }

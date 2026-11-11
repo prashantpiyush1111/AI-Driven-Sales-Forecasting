@@ -3,16 +3,17 @@ ML Training Pipeline — LightGBM Sales Forecasting
 ===================================================
 Dataset : Walmart M5 Sales Forecasting
 Purpose : Load processed data from Feature Store, perform time-series
-          aware train/validation splitting, train LightGBM model,
-          evaluate with RMSE/MAE/WRMSSE, and save model artifacts.
+          aware train/validation/test splitting, train LightGBM model
+          with early stopping, evaluate on unseen holdout test data
+          (RMSE, MAE, MAPE), and save model artifacts.
 
 Pipeline Steps:
   1. Dynamic path resolution
   2. Load processed parquet from Feature Store
-  3. Time-series aware Train / Validation split (no data leakage)
+  3. Time-series aware 3-Way Split (Train / Validation / Test)
   4. Feature matrix & target preparation
-  5. LightGBM model training with early stopping
-  6. Model evaluation (RMSE, MAE, MAPE)
+  5. LightGBM model training with early stopping on validation set
+  6. Model evaluation on unseen test set (RMSE, MAE, MAPE)
   7. Feature importance logging
   8. Model & metadata saving to ml-service/models/
 """
@@ -102,33 +103,39 @@ def load_processed_data(feature_store_path: Path) -> pd.DataFrame:
 
 
 # =====================================================================
-# STEP 3: Time-Series Aware Train / Validation Split
+# STEP 3: Time-Series Aware 3-Way Split (Train / Val / Test)
 # =====================================================================
 def split_time_series(
     df: pd.DataFrame,
     val_days: int = 28,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    test_days: int = 28,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Splits data chronologically — NO random shuffling to prevent leakage.
-    Last `val_days` days become validation; everything before is training.
+    Splits data chronologically into 3 windows — NO random shuffling to prevent leakage:
+      - Train      : Beginning up to (max_date - val_days - test_days)
+      - Validation : (max_date - val_days - test_days) -> (max_date - test_days) [For Early Stopping]
+      - Test       : Last test_days (unseen holdout) [For Final Unbiased Evaluation]
 
     Args:
-        df       : Full processed DataFrame with 'date' column.
-        val_days : Number of trailing days reserved for validation (default=28).
+        df        : Full processed DataFrame with 'date' column.
+        val_days  : Trailing days reserved for early stopping validation (default=28).
+        test_days : Trailing days reserved for final holdout testing (default=28).
 
     Returns:
-        train_df, val_df
+        train_df, val_df, test_df
     """
     logger.info(
-        f"[*] Time-series split: last {val_days} days → validation, rest → training"
+        f"[*] Time-series 3-way split: val_days={val_days}, test_days={test_days}"
     )
 
     df["date"] = pd.to_datetime(df["date"])
     max_date = df["date"].max()
-    split_date = max_date - pd.Timedelta(days=val_days)
+    test_split_date = max_date - pd.Timedelta(days=test_days)
+    val_split_date = test_split_date - pd.Timedelta(days=val_days)
 
-    train_df = df[df["date"] <= split_date].copy()
-    val_df = df[df["date"] > split_date].copy()
+    train_df = df[df["date"] <= val_split_date].copy()
+    val_df = df[(df["date"] > val_split_date) & (df["date"] <= test_split_date)].copy()
+    test_df = df[df["date"] > test_split_date].copy()
 
     logger.info(
         f"    Training   : {train_df['date'].min().date()} → "
@@ -136,12 +143,16 @@ def split_time_series(
     )
     logger.info(
         f"    Validation : {val_df['date'].min().date()} → "
-        f"{val_df['date'].max().date()} | {len(val_df):,} rows"
+        f"{val_df['date'].max().date()} | {len(val_df):,} rows (Early Stopping)"
+    )
+    logger.info(
+        f"    Test       : {test_df['date'].min().date()} → "
+        f"{test_df['date'].max().date()} | {len(test_df):,} rows (Unseen Holdout)"
     )
 
     del df
     gc.collect()
-    return train_df, val_df
+    return train_df, val_df, test_df
 
 
 # =====================================================================
@@ -150,15 +161,16 @@ def split_time_series(
 def prepare_features_and_target(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
-) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, List[str]]:
+    test_df: pd.DataFrame,
+) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, pd.DataFrame, pd.Series, List[str]]:
     """
-    Separates target 'sales' from feature matrix.
+    Separates target 'sales' from feature matrix for train, val, and test sets.
     Encodes categoricals for native LightGBM handling.
 
     Returns:
-        X_train, y_train, X_val, y_val, categorical_feature_names
+        X_train, y_train, X_val, y_val, X_test, y_test, categorical_feature_names
     """
-    logger.info("[*] Building feature matrices X_train / X_val ...")
+    logger.info("[*] Building feature matrices X_train / X_val / X_test ...")
 
     TARGET = "sales"
     # Columns to exclude from features (IDs, target, leakage columns)
@@ -173,6 +185,7 @@ def prepare_features_and_target(
     for col in cat_cols:
         train_df[col] = train_df[col].astype("category")
         val_df[col] = val_df[col].astype("category")
+        test_df[col] = test_df[col].astype("category")
 
     X_train = train_df[feature_cols]
     y_train = train_df[TARGET].astype(np.float32)
@@ -180,13 +193,17 @@ def prepare_features_and_target(
     X_val = val_df[feature_cols]
     y_val = val_df[TARGET].astype(np.float32)
 
+    X_test = test_df[feature_cols]
+    y_test = test_df[TARGET].astype(np.float32)
+
     logger.info(f"    Feature count     : {len(feature_cols)}")
     logger.info(f"    Features          : {feature_cols}")
     logger.info(f"    Categorical feats : {cat_cols}")
     logger.info(f"    X_train shape     : {X_train.shape}")
     logger.info(f"    X_val   shape     : {X_val.shape}")
+    logger.info(f"    X_test  shape     : {X_test.shape}")
 
-    return X_train, y_train, X_val, y_val, cat_cols
+    return X_train, y_train, X_val, y_val, X_test, y_test, cat_cols
 
 
 # =====================================================================
@@ -262,7 +279,6 @@ def train_lightgbm(
 
         # Learning
         "learning_rate"    : 0.05,            # Conservative — better generalisation
-        "n_estimators"     : num_boost_round,
 
         # Regularisation (prevents overfitting)
         "lambda_l1"        : 0.1,             # L1 regularisation
@@ -311,22 +327,23 @@ def train_lightgbm(
 # =====================================================================
 def evaluate_model(
     model: lgb.Booster,
-    X_val: pd.DataFrame,
-    y_val: pd.Series,
+    X: pd.DataFrame,
+    y: pd.Series,
+    split_name: str = "Test",
 ) -> Dict[str, float]:
     """
-    Evaluates trained model on held-out validation set.
+    Evaluates trained model on a dataset (Validation or unseen Test set).
     Computes RMSE, MAE, and MAPE.
 
     Returns:
         Dictionary of metric names → values
     """
-    logger.info("[Step 6] Evaluating model on Validation set ...")
+    logger.info(f"[Step 6] Evaluating model on {split_name} set ...")
 
-    y_pred = model.predict(X_val, num_iteration=model.best_iteration)
+    y_pred = model.predict(X, num_iteration=model.best_iteration)
     y_pred = np.maximum(0, y_pred)   # Sales cannot be negative
 
-    y_true = y_val.values
+    y_true = y.values
 
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
     mae = mean_absolute_error(y_true, y_pred)
@@ -346,7 +363,7 @@ def evaluate_model(
     }
 
     logger.info("=" * 65)
-    logger.info("  EVALUATION RESULTS (Validation Set)")
+    logger.info(f"  EVALUATION RESULTS ({split_name} Set)")
     logger.info("=" * 65)
     logger.info(f"    RMSE  : {metrics['RMSE']:>10.4f}  (Root Mean Squared Error)")
     logger.info(f"    MAE   : {metrics['MAE']:>10.4f}  (Mean Absolute Error)")
@@ -388,7 +405,8 @@ def log_feature_importance(model: lgb.Booster, top_n: int = 15) -> pd.DataFrame:
 # =====================================================================
 def save_model_artifacts(
     model: lgb.Booster,
-    metrics: Dict[str, float],
+    test_metrics: Dict[str, float],
+    val_metrics: Dict[str, float],
     feature_cols: List[str],
     cat_cols: List[str],
     models_dir: Path,
@@ -401,7 +419,8 @@ def save_model_artifacts(
 
     Args:
         model       : Trained lgb.Booster
-        metrics     : Evaluation metrics dict
+        test_metrics: Evaluation metrics dict on unseen test set
+        val_metrics : Evaluation metrics dict on validation set
         feature_cols: Feature column names used during training
         cat_cols    : Categorical feature names
         models_dir  : Directory to save artifacts
@@ -424,7 +443,8 @@ def save_model_artifacts(
         "dataset"           : "Walmart M5 Forecasting",
         "trained_at"        : datetime.datetime.now().isoformat(),
         "best_iteration"    : model.best_iteration,
-        "evaluation_metrics": metrics,
+        "evaluation_metrics": test_metrics,
+        "validation_metrics": val_metrics,
         "feature_columns"   : feature_cols,
         "categorical_cols"  : cat_cols,
         "num_features"      : len(feature_cols),
@@ -451,12 +471,13 @@ def save_model_artifacts(
 # =====================================================================
 # MAIN — End-to-End Training Execution
 # =====================================================================
-def run_training_pipeline(val_days: int = 28) -> lgb.Booster:
+def run_training_pipeline(val_days: int = 28, test_days: int = 28) -> lgb.Booster:
     """
-    Orchestrates the full end-to-end ML training pipeline.
+    Orchestrates the full end-to-end ML training pipeline with 3-way split.
 
     Args:
-        val_days : Days reserved for validation (default: 28)
+        val_days  : Days reserved for early stopping validation (default: 28)
+        test_days : Days reserved for unseen holdout test set (default: 28)
 
     Returns:
         Trained LightGBM Booster model
@@ -473,22 +494,25 @@ def run_training_pipeline(val_days: int = 28) -> lgb.Booster:
     # Step 2 — Load data
     df = load_processed_data(feature_store_path)
 
-    # Step 3 — Time-series split
-    train_df, val_df = split_time_series(df, val_days=val_days)
+    # Step 3 — Time-series 3-way split
+    train_df, val_df, test_df = split_time_series(df, val_days=val_days, test_days=test_days)
     del df
     gc.collect()
 
     # Step 4 — Feature & target preparation
-    X_train, y_train, X_val, y_val, cat_cols = prepare_features_and_target(
-        train_df, val_df
-    )
+    (
+        X_train, y_train,
+        X_val, y_val,
+        X_test, y_test,
+        cat_cols,
+    ) = prepare_features_and_target(train_df, val_df, test_df)
 
     # Keep feature col names before freeing DFs
     feature_cols = list(X_train.columns)
-    del train_df, val_df
+    del train_df, val_df, test_df
     gc.collect()
 
-    # Step 5 — Train LightGBM
+    # Step 5 — Train LightGBM (with early stopping on Validation set)
     model = train_lightgbm(
         X_train, y_train,
         X_val, y_val,
@@ -497,14 +521,15 @@ def run_training_pipeline(val_days: int = 28) -> lgb.Booster:
         early_stopping_rounds=50,
     )
 
-    # Step 6 — Evaluate
-    metrics = evaluate_model(model, X_val, y_val)
+    # Step 6 — Evaluate on Validation and Unseen Holdout Test set
+    val_metrics = evaluate_model(model, X_val, y_val, split_name="Validation")
+    test_metrics = evaluate_model(model, X_test, y_test, split_name="Test (Holdout)")
 
     # Step 7 — Feature importance
     log_feature_importance(model, top_n=15)
 
     # Step 8 — Save artifacts
-    save_model_artifacts(model, metrics, feature_cols, cat_cols, models_dir)
+    save_model_artifacts(model, test_metrics, val_metrics, feature_cols, cat_cols, models_dir)
 
     logger.info("=" * 65)
     logger.info("  TRAINING PIPELINE COMPLETE!")
@@ -516,5 +541,5 @@ def run_training_pipeline(val_days: int = 28) -> lgb.Booster:
 # Entry Point
 # =====================================================================
 if __name__ == "__main__":
-    run_training_pipeline(val_days=28)
+    run_training_pipeline(val_days=28, test_days=28)
     print("\n[DONE] Model training finished! Check ml-service/models/ for saved artifacts.")
