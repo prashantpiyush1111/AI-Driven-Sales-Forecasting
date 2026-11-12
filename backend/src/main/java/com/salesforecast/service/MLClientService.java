@@ -3,10 +3,9 @@ package com.salesforecast.service;
 import com.salesforecast.dto.ml.MlPredictRequest;
 import com.salesforecast.dto.ml.MlPredictResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -22,16 +21,8 @@ public class MLClientService {
 
     private final RestClient restClient;
 
-    public MLClientService(RestClient.Builder builder,
-                           @Value("${ml.service.base-url:http://localhost:8000}") String baseUrl,
-                           @Value("${ml.service.timeout-ms:5000}") int timeoutMs) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(timeoutMs);
-        requestFactory.setReadTimeout(timeoutMs);
-        this.restClient = builder
-                .baseUrl(baseUrl)
-                .requestFactory(requestFactory)
-                .build();
+    public MLClientService(@Qualifier("mlRestClient") RestClient restClient) {
+        this.restClient = restClient;
     }
 
     public MlPredictResponse predict(String productName, LocalDate forecastDate) {

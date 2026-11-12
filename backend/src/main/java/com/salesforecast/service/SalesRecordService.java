@@ -1,6 +1,7 @@
 package com.salesforecast.service;
 
 import com.salesforecast.dto.request.SalesRecordRequest;
+import com.salesforecast.dto.response.SalesFiltersResponse;
 import com.salesforecast.dto.response.SalesRecordResponse;
 import com.salesforecast.dto.response.SalesSummaryResponse;
 import com.salesforecast.entity.SalesRecord;
@@ -44,6 +45,13 @@ public class SalesRecordService {
         BigDecimal totalRevenue = view.getTotalRevenue() != null ? view.getTotalRevenue() : BigDecimal.ZERO;
         long recordCount = view.getRecordCount() != null ? view.getRecordCount() : 0L;
         return new SalesSummaryResponse(totalQuantity, totalRevenue, recordCount);
+    }
+
+    public SalesFiltersResponse getFilters() {
+        return new SalesFiltersResponse(
+                salesRecordRepository.findDistinctProductNames(),
+                salesRecordRepository.findDistinctCategories(),
+                salesRecordRepository.findDistinctRegions());
     }
 
     public SalesRecordResponse getById(Long id) {
@@ -93,8 +101,8 @@ public class SalesRecordService {
 
     private void applyRequest(SalesRecord record, SalesRecordRequest request) {
         record.setProductName(request.getProductName().trim());
-        record.setCategory(request.getCategory());
-        record.setRegion(request.getRegion());
+        record.setCategory(clean(request.getCategory()));
+        record.setRegion(clean(request.getRegion()));
         record.setQuantity(request.getQuantity());
         record.setRevenue(request.getRevenue());
         record.setSaleDate(request.getSaleDate());
