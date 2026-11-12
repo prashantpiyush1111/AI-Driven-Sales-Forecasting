@@ -1,54 +1,23 @@
-# Frontend integration handoff
+# Frontend and API integration
 
-The UI currently runs on clearly labeled sample data in `src/data/demoData.js`. Replace those demo imports with the service functions in `src/services/` only after the backend routes and payloads are agreed. The browser should call the Spring Boot API; Spring Boot owns persistence, authorization, KPI aggregation, and calls into the ML and RAG services.
+The dashboard now reads live data from the Spring Boot API. The API base URL is `VITE_API_URL`; in local development the frontend calls `/api` and Vite forwards that to `http://localhost:8080`.
 
-## Backend team: API decisions needed
+## Connected frontend flows
 
-Please publish or confirm the following before frontend wiring:
+- Sign in, register, and profile verification use `/api/auth/login`, `/api/auth/register`, and `/api/auth/me`.
+- Dashboard KPI, trend, top products, regional breakdown, filter options, and recent sales use the analytics and sales endpoints documented in `shared/api-contracts/backend.yaml`.
+- `apiClient.js` attaches the saved JWT and clears an expired session after a 401 response.
 
-- Base path, local port, CORS policy, and whether the Vite `/api` proxy is the expected local setup.
-- Authentication flow: login/register paths, token lifetime and refresh/logout behavior, role names, and permitted routes.
-- Sales list/create path, page numbering convention, sort syntax, filter names, and response envelope. The current entity fields are `id`, `productName`, `category`, `region`, `quantity`, `revenue`, `saleDate`, and `createdAt`.
-- Forecast list/latest paths, filtering by product and date range, and whether results are paginated.
-- Dashboard/KPI and analytics aggregation endpoints, including the comparison period used for trend percentages.
-- Standard error response shape and validation behavior.
+The Sales, Analytics, Forecast, and AI Assistant screens still have demo or placeholder content where the page-specific API flow is not wired yet. The backend should remain the browser's single API boundary; it owns calls to the ML service.
 
-Suggested query filters are `from`, `to`, `region`, `productName`, `page`, `size`, and `sort`; these are proposals, not an implemented backend contract.
+## Backend and ML handoff
 
-## ML team: forecast payload decisions needed
+The backend API contract is maintained in `shared/api-contracts/backend.yaml`. The backend should keep its response fields stable for the frontend. Forecasts currently use `productName`, `forecastDate`, `predictedQuantity`, `predictedRevenue`, `confidenceScore`, and `modelVersion`.
 
-The existing forecast entity supports `productName`, `forecastDate`, `predictedQuantity`, `predictedRevenue`, `confidenceScore`, `modelVersion`, and `createdAt`. Please confirm:
+Before wiring the remaining forecast and assistant screens, confirm:
 
-- Whether confidence is a 0–1 fraction or 0–100 percentage.
-- Whether forecast dates are points or period start/end dates, and the supported horizon/granularity.
-- Whether outputs include lower/upper prediction bounds, model status, run ID, and generation timestamp.
-- How missing/invalid input history and model failures are reported.
+- Whether `confidenceScore` is a 0–1 fraction or 0–100 percentage.
+- Supported forecast horizon and granularity, and whether lower/upper prediction bounds are available.
+- The RAG chat endpoint, request/response format, source context shape, and error behavior.
 
-Spring Boot should expose a stable response contract to the UI and translate any ML service payloads; the UI should not depend on internal ML endpoints.
-
-## Candidate UI response shapes
-
-These shapes make the current screens straightforward to wire; adjust them jointly before freezing OpenAPI:
-
-```json
-{
-  "summary": {
-    "totalRevenue": 0,
-    "unitsSold": 0,
-    "averageMonthlyRevenue": 0,
-    "forecastRevenue": 0,
-    "revenueChangePercent": null,
-    "unitsChangePercent": null
-  },
-  "salesSeries": [{ "period": "2026-11", "actualRevenue": 0, "forecastRevenue": null }],
-  "forecasts": [{
-    "forecastDate": "2026-12-01",
-    "predictedQuantity": 0,
-    "predictedRevenue": 0,
-    "confidenceScore": 0,
-    "modelVersion": ""
-  }]
-}
-```
-
-The dashboard trend, product/region breakdown, sales table, forecast detail, and assistant screens already have demo states. The assistant stays visibly unavailable until the RAG/backend chat endpoint can answer with source context and errors in a defined format.
+The UI should not call internal ML or RAG service endpoints directly.

@@ -1,4 +1,5 @@
 import { useLocation } from "react-router-dom";
+import useAuth from "../auth/useAuth";
 
 const pageNames = {
   "/": "Overview",
@@ -10,6 +11,7 @@ const pageNames = {
 
 export default function Navbar({ onMenuClick, sidebarOpen }) {
   const { pathname } = useLocation();
+  const { user, logout } = useAuth();
   const pageName = pageNames[pathname] || "Overview";
 
   return (
@@ -28,7 +30,9 @@ export default function Navbar({ onMenuClick, sidebarOpen }) {
       </div>
       <div className="topbar-right">
         <span className="demo-badge"><span /> DEMO DATA</span>
-        <button className="avatar-button" title="Signed in as Prashant">P</button>
+        {user?.role && <span className="role-badge">{user.role}</span>}
+        <span className="welcome-user">{user?.username ?? "User"}</span>
+        <button className="logout-button" type="button" onClick={logout}>Log out</button>
       </div>
     </header>
   );

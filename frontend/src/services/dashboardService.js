@@ -1,7 +1,46 @@
 import apiClient from "./apiClient";
 
-// Endpoint names follow the proposed frontend integration contract in INTEGRATION.md.
-export const getDashboardSummary = (params) => apiClient.get("/dashboard/summary", { params });
-export const getSalesSeries = (params) => apiClient.get("/analytics/sales-series", { params });
-export const getProductBreakdown = (params) => apiClient.get("/analytics/products", { params });
-export const getRegionBreakdown = (params) => apiClient.get("/analytics/regions", { params });
+const asList = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.value)) return data.value;
+  return [];
+};
+
+export async function getOverview() {
+  const { data } = await apiClient.get("/analytics/overview");
+  return data;
+}
+
+export async function getTrend(params = {}) {
+  const { data } = await apiClient.get("/analytics/trend", { params });
+  return asList(data);
+}
+
+export async function getTopProducts(params = {}) {
+  const { data } = await apiClient.get("/analytics/top-products", { params });
+  return asList(data);
+}
+
+export async function getSalesByCategory(params = {}) {
+  const { data } = await apiClient.get("/analytics/by-category", { params });
+  return asList(data);
+}
+
+export async function getSalesByRegion(params = {}) {
+  const { data } = await apiClient.get("/analytics/by-region", { params });
+  return asList(data);
+}
+
+export async function getSalesSummary(params = {}) {
+  const { data } = await apiClient.get("/sales/summary", { params });
+  return data;
+}
+
+export async function getFilterOptions() {
+  const { data } = await apiClient.get("/sales/filters");
+  return {
+    products: data?.products ?? [],
+    categories: data?.categories ?? [],
+    regions: data?.regions ?? [],
+  };
+}

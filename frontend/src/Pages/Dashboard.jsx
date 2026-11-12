@@ -1,8 +1,26 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Line } from "react-chartjs-2";
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend } from "chart.js";
-import { demoSales, demoForecast } from "../data/demoData";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import {
+  getFilterOptions,
+  getOverview,
+  getSalesByRegion,
+  getSalesSummary,
+  getTopProducts,
+  getTrend,
+} from "../services/dashboardService";
+import { getSalesRecords } from "../services/salesService";
+import { getErrorMessage } from "../services/apiError";
 import PageHeading from "../components/common/PageHeading";
 import Notice from "../components/common/Notice";
 import SelectFilter from "../components/common/SelectFilter";
@@ -13,12 +31,25 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, 
 
 const money = (amount) => new Intl.NumberFormat("en-IN", {
   style: "currency", currency: "INR", maximumFractionDigits: 0,
-}).format(amount || 0);
+}).format(Number(amount) || 0);
+
 const shortMoney = (amount) => new Intl.NumberFormat("en-IN", {
   notation: "compact", maximumFractionDigits: 1,
-}).format(amount || 0);
+}).format(Number(amount) || 0);
 
-function createChartOptions() {
+function formatDate(date) {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 10);
+}
+
+function getDateRange(monthCount) {
+  const toDate = new Date();
+  const fromDate = new Date(toDate);
+  fromDate.setMonth(fromDate.getMonth() - Number(monthCount));
+  return { from: formatDate(fromDate), to: formatDate(toDate) };
+}
+
+function makeChartOptions() {
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -35,102 +66,176 @@ function createChartOptions() {
   };
 }
 
-function getMonthlySales(rows) {
-  const totals = {};
-  rows.forEach((row) => {
-    const month = row.saleDate.slice(0, 7);
-    totals[month] = (totals[month] || 0) + row.revenue;
-  });
-  return Object.entries(totals).sort(([first], [second]) => first.localeCompare(second));
+function makeChartData(trend) {
+  return {
+    labels: trend.map((point) => {
+      const date = new Date(`${point.period}-01T00:00:00`);
+      return date.toLocaleDateString("en", { month: "short", year: "2-digit" });
+    }),
+    datasets: [{
+      label: "Revenue",
+      data: trend.map((point) => Number(point.revenue) || 0),
+      borderColor: "#4568e8",
+      backgroundColor: "rgba(69,104,232,.12)",
+      fill: true,
+      tension: 0.38,
+      pointRadius: 3,
+      borderWidth: 2.5,
+    }],
+  };
 }
 
-function getTopProducts(rows) {
-  const totals = {};
-  rows.forEach((row) => {
-    totals[row.productName] = (totals[row.productName] || 0) + row.revenue;
-  });
-  return Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 4);
+function RegionBreakdown({ regions }) {
+  if (!regions.length) return <p className="empty-message">No region data for this period.</p>;
+  return (
+    <div className="region-list">
+      {regions.map((region, index) => (
+        <div className="region-analytics-row" key={region.name}>
+          <div className="region-analytics-label">
+            <span className={`region-dot region-dot-${index % 4}`} />
+            <strong>{region.name}</strong>
+            <span>{Number(region.revenue || 0).toLocaleString("en-IN", { notation: "compact" })}</span>
+          </div>
+          <small>{money(region.revenue)}</small>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function Dashboard() {
   const [region, setRegion] = useState("All regions");
   const [period, setPeriod] = useState("12 months");
-  const regions = ["All regions", ...new Set(demoSales.map((row) => row.region))];
+  const [regions, setRegions] = useState([]);
+  const [dashboard, setDashboard] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const monthlySales = useMemo(() => {
-    const rows = region === "All regions"
-      ? demoSales
-      : demoSales.filter((row) => row.region === region);
-    const monthCount = Number(period.split(" ")[0]);
-    return getMonthlySales(rows).slice(-monthCount);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboard() {
+      setLoading(true);
+      setError("");
+      const dateRange = getDateRange(period.split(" ")[0]);
+      const filters = {
+        ...dateRange,
+        ...(region !== "All regions" ? { region } : {}),
+      };
+
+      try {
+        const [overview, summary, trend, products, regionTotals, filterOptions, salesPage] = await Promise.all([
+          getOverview(),
+          getSalesSummary(filters),
+          getTrend({ ...filters, granularity: "MONTHLY" }),
+          getTopProducts(dateRange),
+          getSalesByRegion(dateRange),
+          getFilterOptions(),
+          getSalesRecords({ ...filters, page: 0, size: 5, sort: "saleDate,desc" }),
+        ]);
+
+        if (cancelled) return;
+        setDashboard({
+          overview,
+          summary,
+          trend,
+          products,
+          regionTotals,
+          recentSales: salesPage.data?.content ?? [],
+        });
+        setRegions(filterOptions.regions);
+      } catch (requestError) {
+        if (!cancelled) setError(getErrorMessage(requestError, "Dashboard data could not be loaded."));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadDashboard();
+    return () => { cancelled = true; };
   }, [region, period]);
 
-  const revenue = monthlySales.reduce((sum, [, amount]) => sum + amount, 0);
-  const visibleMonths = new Set(monthlySales.map(([month]) => month));
-  const units = demoSales
-    .filter((row) => (region === "All regions" || row.region === region)
-      && visibleMonths.has(row.saleDate.slice(0, 7)))
-    .reduce((sum, row) => sum + row.quantity, 0);
-  const forecastRevenue = demoForecast.reduce((sum, row) => sum + row.predictedRevenue, 0);
-  const products = getTopProducts(demoSales);
-
-  const chartData = {
-    labels: monthlySales.map(([month]) => new Date(`${month}-01T00:00:00`).toLocaleDateString("en", { month: "short" })),
-    datasets: [{
-      label: "Revenue", data: monthlySales.map(([, amount]) => amount),
-      borderColor: "#4568e8", backgroundColor: "rgba(69,104,232,.12)",
-      fill: true, tension: 0.38, pointRadius: 3, borderWidth: 2.5,
-    }],
-  };
+  const chartData = useMemo(() => makeChartData(dashboard?.trend ?? []), [dashboard]);
+  const regionOptions = ["All regions", ...regions];
+  const salesSummary = dashboard?.summary ?? {};
+  const overview = dashboard?.overview ?? {};
+  const products = dashboard?.products ?? [];
+  const regionTotals = dashboard?.regionTotals ?? [];
+  const recentSales = dashboard?.recentSales ?? [];
+  const monthCount = Number(period.split(" ")[0]);
+  const averageMonthlyRevenue = Number(salesSummary.totalRevenue || 0) / monthCount;
 
   return (
     <div className="page-content">
-      <PageHeading
-        title="Sales overview"
-        description="A clear view of your sales performance and what may come next."
-      >
-        <SelectFilter label="Filter by region" value={region} options={regions} onChange={setRegion} />
+      <PageHeading title="Sales overview"
+        description="A clear view of your sales performance and what may come next.">
+        <SelectFilter label="Filter by region" value={region} options={regionOptions} onChange={setRegion} />
         <SelectFilter label="Select time period" value={period}
           options={["12 months", "6 months", "3 months"]} onChange={setPeriod} />
       </PageHeading>
 
-      <Notice>These figures use sample data while the API integration is in progress.</Notice>
+      <Notice label={error ? "API ERROR" : loading ? "LOADING" : "LIVE API"}>
+        {error || (loading
+          ? "Loading dashboard data from the backend..."
+          : "Dashboard figures are loaded from the Spring Boot API.")}
+      </Notice>
 
       <section className="kpi-grid" aria-label="Key performance indicators">
-        <KpiCard label="Total revenue" value={money(revenue)} detail="Across selected period" trend="↗ 12.8%" tone="blue" icon="₹" />
-        <KpiCard label="Units sold" value={units.toLocaleString("en-IN")} detail="Recorded sales quantity" trend="↗ 8.4%" tone="violet" icon="▤" />
-        <KpiCard label="Forecast revenue" value={money(forecastRevenue)} detail="Next 6 months · preview" trend="MODEL PREVIEW" tone="mint" icon="⌁" />
-        <KpiCard label="Average per month" value={money(monthlySales.length ? revenue / monthlySales.length : 0)} detail="Selected period average" trend="↗ 4.2%" tone="amber" icon="◷" />
+        <KpiCard label="Total revenue" value={money(salesSummary.totalRevenue)} detail="For selected period and region" trend="SALES API" tone="blue" icon="₹" />
+        <KpiCard label="Units sold" value={Number(salesSummary.totalQuantity || 0).toLocaleString("en-IN")} detail="Recorded sales quantity" trend="SALES API" tone="violet" icon="▤" />
+        <KpiCard label="Forecast revenue" value={money(overview.upcomingForecastRevenue)} detail="Upcoming saved forecasts" trend={`${overview.forecastCount || 0} FORECASTS`} tone="mint" icon="⌁" />
+        <KpiCard label="Average per month" value={money(averageMonthlyRevenue)} detail="Selected period average" trend={`${monthCount} MONTHS`} tone="amber" icon="◷" />
       </section>
 
-      <section className="content-grid dashboard-grid">
-        <div className="panel trend-panel">
-          <div className="panel-heading">
-            <div><h2>Revenue trend</h2><p>Monthly recorded sales</p></div>
-            <span className="chart-legend"><i /> Actual revenue</span>
-          </div>
-          <div className="chart-wrap"><Line data={chartData} options={createChartOptions()} /></div>
-        </div>
-
-        <div className="panel products-panel">
-          <div className="panel-heading">
-            <div><h2>Top products</h2><p>By total revenue</p></div>
-            <Link className="text-link" to="/analytics">View all <span>→</span></Link>
-          </div>
-          <div className="product-list">
-            {products.map(([name, amount], index) => (
-              <div className="product-row" key={name}>
-                <span className={`rank rank-${index + 1}`}>{String(index + 1).padStart(2, "0")}</span>
-                <span className="product-name">{name}</span>
-                <strong>{money(amount)}</strong>
+      {error ? (
+        <section className="panel dashboard-error">
+          <h2>Could not load dashboard data</h2>
+          <p>Check that the backend is running and sign in again if your session has expired.</p>
+        </section>
+      ) : (
+        <>
+          <section className="content-grid dashboard-grid">
+            <div className="panel trend-panel">
+              <div className="panel-heading">
+                <div><h2>Revenue trend</h2><p>Monthly recorded sales</p></div>
+                <span className="chart-legend"><i /> Actual revenue</span>
               </div>
-            ))}
-          </div>
-          <div className="panel-footnote">Based on all available sample records</div>
-        </div>
-      </section>
+              <div className="chart-wrap">
+                {dashboard?.trend?.length
+                  ? <Line data={chartData} options={makeChartOptions()} />
+                  : <p className="empty-message">No trend data for this period.</p>}
+              </div>
+            </div>
 
-      <RecentSales rows={[...demoSales].slice(-5).reverse()} />
+            <div className="panel products-panel">
+              <div className="panel-heading">
+                <div><h2>Top products</h2><p>By revenue in selected period</p></div>
+                <Link className="text-link" to="/analytics">View all <span>→</span></Link>
+              </div>
+              <div className="product-list">
+                {products.length ? products.slice(0, 4).map((product, index) => (
+                  <div className="product-row" key={product.name}>
+                    <span className={`rank rank-${index + 1}`}>{String(index + 1).padStart(2, "0")}</span>
+                    <span className="product-name">{product.name}</span>
+                    <strong>{money(product.revenue)}</strong>
+                  </div>
+                )) : <p className="empty-message">No product data for this period.</p>}
+              </div>
+              <div className="panel-footnote">Live data from the sales analytics API</div>
+            </div>
+          </section>
+
+          <section className="content-grid analytics-grid">
+            <div className="panel">
+              <div className="panel-heading">
+                <div><h2>Sales by region</h2><p>Revenue in selected period</p></div>
+              </div>
+              <RegionBreakdown regions={regionTotals} />
+            </div>
+            <RecentSales rows={recentSales} />
+          </section>
+        </>
+      )}
     </div>
   );
 }

@@ -1,0 +1,119 @@
+openapi: 3.0.3
+info:
+  title: AI-Driven Sales Forecasting - ML Service API
+  version: 0.1.0
+  description: >
+    DRAFT contract proposed by the backend. Sagar (ML owner) must confirm
+    or change it before the backend and ML service are integrated.
+    Called only by the Spring Boot backend, never by the browser.
+    JSON field names are snake_case.
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+# Internal service: reachable only from the backend, no authentication.
+security: []
+
+tags:
+  - name: Prediction
+  - name: Health
+
+paths:
+  /predict:
+    post:
+      tags: [Prediction]
+      summary: Predict sales for one product on one date
+      description: >
+        The backend uses a 5 second connect and read timeout. Responses slower
+        than that are reported to the client as 503.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PredictRequest'
+      responses:
+        '200':
+          description: Prediction result (all four fields are required by the backend)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictResponse'
+        '404':
+          description: Product is unknown to the model
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MlError'
+        '422':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MlError'
+        '500':
+          description: Model or internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MlError'
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+components:
+  schemas:
+    PredictRequest:
+      type: object
+      required: [product_name, forecast_date]
+      properties:
+        product_name:
+          type: string
+          maxLength: 150
+          example: Laptop Pro 15
+        forecast_date:
+          type: string
+          format: date
+          description: ISO date (yyyy-MM-dd), today or in the future
+          example: '2026-11-01'
+
+    PredictResponse:
+      type: object
+      required: [predicted_quantity, predicted_revenue, confidence_score, model_version]
+      properties:
+        predicted_quantity:
+          type: integer
+          minimum: 0
+          example: 42
+        predicted_revenue:
+          type: number
+          minimum: 0
+          description: Max 2 decimal places
+          example: 41999.5
+        confidence_score:
+          type: number
+          minimum: 0
+          maximum: 1
+          example: 0.87
+        model_version:
+          type: string
+          maxLength: 50
+          example: m5-lgbm-v1
+
+    MlError:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: FastAPI-style error message

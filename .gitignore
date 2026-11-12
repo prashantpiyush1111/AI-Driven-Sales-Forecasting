@@ -467,3 +467,10 @@ temp/
 *.swn
 *.orig
 *.rej
+
+
+# Ignore raw and processed data
+m5-forecasting-accuracy (walmart data)/
+feature-store/
+*.parquet
+*.csv
