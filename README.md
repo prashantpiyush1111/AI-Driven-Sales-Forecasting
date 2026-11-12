@@ -128,9 +128,9 @@ The project emphasizes:
 
 ## 🗺️ Roadmap
 
-- [x] Spring Boot foundation
+- [] Spring Boot foundation
 - [x] Core persistence entities and repositories
-- [ ] Authentication and RBAC completion
+- [x] Authentication and RBAC completion
 - [ ] Dashboard and KPI APIs
 - [ ] Forecast API integration
 - [ ] ML service integration
