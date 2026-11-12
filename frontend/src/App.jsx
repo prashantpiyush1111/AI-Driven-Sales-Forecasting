@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
+import ProtectedRoute from "./auth/ProtectedRoute";
+import Login from "./Pages/Login";
 
 import "./styles/App.css";
 
@@ -283,24 +285,40 @@ function Chat() {
   );
 }
 
+// Shell shown around every page that requires login.
+function Layout() {
+  return (
+    <div className="app-layout">
+      <Sidebar />
+
+      <div className="main-content">
+        <Navbar />
+        <Outlet />
+      </div>
+    </div>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
-      <div className="app-layout">
-        <Sidebar />
+      <Routes>
+        <Route path="/login" element={<Login />} />
 
-        <div className="main-content">
-          <Navbar />
-
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/sales" element={<Sales />} />
-            <Route path="/forecast" element={<Forecast />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/chat" element={<Chat />} />
-          </Routes>
-        </div>
-      </div>
+        <Route
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/sales" element={<Sales />} />
+          <Route path="/forecast" element={<Forecast />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/chat" element={<Chat />} />
+        </Route>
+      </Routes>
     </BrowserRouter>
   );
 }
