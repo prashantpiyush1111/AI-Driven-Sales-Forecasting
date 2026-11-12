@@ -6,6 +6,9 @@ import com.salesforecast.dto.response.AuthResponse;
 import com.salesforecast.entity.User;
 import com.salesforecast.repository.UserRepository;
 import com.salesforecast.security.JwtUtil;
+import com.salesforecast.security.LoginAttemptService;
+import com.salesforecast.dto.response.UserResponse;
+import com.salesforecast.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +46,9 @@ class AuthServiceTest {
 
     @Mock
     private JwtUtil jwtUtil;
+
+    @Mock
+    private LoginAttemptService loginAttemptService;
 
     @InjectMocks
     private AuthService authService;
@@ -139,8 +145,50 @@ class AuthServiceTest {
                 LoginRequest.builder().username("admin").password("wrong").build()))
                 .isInstanceOf(BadCredentialsException.class);
 
+        verify(loginAttemptService).recordFailure("admin");
+        verify(loginAttemptService, never()).recordSuccess(any());
         verify(userRepository, never()).findByUsername(any());
         verify(jwtUtil, never()).generateToken(any(), any());
+    }
+
+    @Test
+    @DisplayName("login: locked account -> 429 before authentication is attempted")
+    void login_lockedAccount_throwsTooManyRequests() {
+        org.mockito.Mockito.doThrow(new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "locked"))
+                .when(loginAttemptService).assertNotLocked("admin");
+
+        assertThatThrownBy(() -> authService.login(
+                LoginRequest.builder().username("admin").password("whatever1").build()))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
+                        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
+
+        verify(authenticationManager, never()).authenticate(any());
+    }
+
+    @Test
+    @DisplayName("getProfile: returns user details without the password")
+    void getProfile_success() {
+        User user = new User();
+        user.setUsername("admin");
+        user.setEmail("admin@salesforecast.com");
+        user.setRole("ADMIN");
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user));
+
+        UserResponse profile = authService.getProfile("admin");
+
+        assertThat(profile.username()).isEqualTo("admin");
+        assertThat(profile.email()).isEqualTo("admin@salesforecast.com");
+        assertThat(profile.role()).isEqualTo("ADMIN");
+    }
+
+    @Test
+    @DisplayName("getProfile: unknown user -> ResourceNotFoundException")
+    void getProfile_unknownUser() {
+        when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.getProfile("ghost"))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test

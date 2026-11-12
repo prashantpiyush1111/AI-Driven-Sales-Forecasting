@@ -6,6 +6,7 @@ import com.salesforecast.entity.Forecast;
 import com.salesforecast.exception.BadRequestException;
 import com.salesforecast.exception.ResourceNotFoundException;
 import com.salesforecast.repository.ForecastRepository;
+import com.salesforecast.repository.SalesRecordRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,7 @@ import java.util.List;
 public class ForecastService {
 
     private final ForecastRepository forecastRepository;
+    private final SalesRecordRepository salesRecordRepository;
     private final MLClientService mlClientService;
 
     // Intentionally not @Transactional: the slow HTTP call to the ML service
@@ -34,6 +36,9 @@ public class ForecastService {
         }
 
         String product = productName.trim();
+        if (!salesRecordRepository.existsByProductName(product)) {
+            throw new BadRequestException("No sales history found for product: " + product);
+        }
         MlPredictResponse prediction = mlClientService.predict(product, forecastDate);
 
         Forecast forecast = Forecast.builder()
@@ -49,8 +54,11 @@ public class ForecastService {
     }
 
     @Transactional(readOnly = true)
-    public List<ForecastResponse> getForecastsByProduct(String productName) {
-        return forecastRepository.findByProductNameOrderByForecastDateAsc(productName.trim())
+    public List<ForecastResponse> getForecastsByProduct(String productName, LocalDate from, LocalDate to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new BadRequestException("'from' date cannot be after 'to' date");
+        }
+        return forecastRepository.search(productName.trim(), from, to)
                 .stream()
                 .map(this::toResponse)
                 .toList();

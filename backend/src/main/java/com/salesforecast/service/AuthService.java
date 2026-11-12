@@ -4,12 +4,16 @@ import com.salesforecast.dto.request.LoginRequest;
 import com.salesforecast.dto.request.RegisterRequest;
 import com.salesforecast.dto.response.AuthResponse;
 import com.salesforecast.entity.User;
+import com.salesforecast.exception.ResourceNotFoundException;
 import com.salesforecast.repository.UserRepository;
+import com.salesforecast.dto.response.UserResponse;
 import com.salesforecast.security.JwtUtil;
+import com.salesforecast.security.LoginAttemptService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -26,6 +30,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
+    private final LoginAttemptService loginAttemptService;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -53,13 +58,27 @@ public class AuthService {
     public AuthResponse login(LoginRequest request) {
         String username = request.getUsername().trim();
 
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(username, request.getPassword()));
+        loginAttemptService.assertNotLocked(username);
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(username, request.getPassword()));
+        } catch (AuthenticationException ex) {
+            loginAttemptService.recordFailure(username);
+            throw ex;
+        }
+        loginAttemptService.recordSuccess(username);
 
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadCredentialsException("Invalid username or password"));
 
         return buildAuthResponse(user);
+    }
+
+    @Transactional(readOnly = true)
+    public UserResponse getProfile(String username) {
+        return userRepository.findByUsername(username)
+                .map(UserResponse::from)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
     }
 
     private AuthResponse buildAuthResponse(User user) {

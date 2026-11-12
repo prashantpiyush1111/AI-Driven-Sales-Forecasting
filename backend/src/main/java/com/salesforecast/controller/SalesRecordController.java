@@ -1,6 +1,7 @@
 package com.salesforecast.controller;
 
 import com.salesforecast.dto.request.SalesRecordRequest;
+import com.salesforecast.dto.response.SalesFiltersResponse;
 import com.salesforecast.dto.response.SalesRecordResponse;
 import com.salesforecast.dto.response.SalesSummaryResponse;
 import com.salesforecast.service.SalesRecordService;
@@ -56,17 +57,24 @@ public class SalesRecordController {
                 salesRecordService.summarize(productName, category, region, from, to));
     }
 
+    @GetMapping("/filters")
+    public ResponseEntity<SalesFiltersResponse> filters() {
+        return ResponseEntity.ok(salesRecordService.getFilters());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<SalesRecordResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(salesRecordService.getById(id));
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<SalesRecordResponse> create(@Valid @RequestBody SalesRecordRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(salesRecordService.create(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<SalesRecordResponse> update(@PathVariable Long id,
                                                       @Valid @RequestBody SalesRecordRequest request) {
         return ResponseEntity.ok(salesRecordService.update(id, request));
