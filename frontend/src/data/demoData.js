@@ -1,0 +1,33 @@
+const monthlySales = [
+  ["2026-01-08", "Laptop", "Electronics", "North", 12, 234000],
+  ["2026-01-18", "Smartphone", "Electronics", "West", 18, 198000],
+  ["2026-02-09", "Headphones", "Accessories", "South", 35, 87500],
+  ["2026-02-21", "Monitor", "Electronics", "East", 14, 154000],
+  ["2026-03-06", "Laptop", "Electronics", "West", 16, 312000],
+  ["2026-03-24", "Smartphone", "Electronics", "North", 21, 231000],
+  ["2026-04-11", "Headphones", "Accessories", "East", 42, 105000],
+  ["2026-04-19", "Monitor", "Electronics", "South", 19, 209000],
+  ["2026-05-07", "Laptop", "Electronics", "North", 20, 390000],
+  ["2026-05-22", "Smartphone", "Electronics", "South", 24, 264000],
+  ["2026-06-04", "Headphones", "Accessories", "West", 48, 120000],
+  ["2026-06-20", "Monitor", "Electronics", "East", 23, 253000],
+  ["2026-07-09", "Laptop", "Electronics", "South", 18, 351000],
+  ["2026-07-26", "Smartphone", "Electronics", "East", 27, 297000],
+  ["2026-08-05", "Headphones", "Accessories", "North", 53, 132500],
+  ["2026-08-21", "Monitor", "Electronics", "West", 25, 275000],
+  ["2026-09-08", "Laptop", "Electronics", "East", 23, 448500],
+  ["2026-09-25", "Smartphone", "Electronics", "North", 29, 319000],
+  ["2026-10-10", "Headphones", "Accessories", "South", 57, 142500],
+  ["2026-10-27", "Monitor", "Electronics", "West", 28, 308000],
+  ["2026-11-04", "Laptop", "Electronics", "North", 25, 487500],
+  ["2026-11-10", "Smartphone", "Electronics", "South", 32, 352000],
+];
+export const demoSales = monthlySales.map(([saleDate, productName, category, region, quantity, revenue], id) => ({ id: id + 1, saleDate, productName, category, region, quantity, revenue }));
+export const demoForecast = [
+  { forecastDate: "2026-12-01", predictedRevenue: 890000, predictedQuantity: 83, confidenceScore: 82.4 },
+  { forecastDate: "2027-01-01", predictedRevenue: 925000, predictedQuantity: 87, confidenceScore: 80.8 },
+  { forecastDate: "2027-02-01", predictedRevenue: 910000, predictedQuantity: 85, confidenceScore: 78.9 },
+  { forecastDate: "2027-03-01", predictedRevenue: 980000, predictedQuantity: 91, confidenceScore: 77.2 },
+  { forecastDate: "2027-04-01", predictedRevenue: 1030000, predictedQuantity: 96, confidenceScore: 75.8 },
+  { forecastDate: "2027-05-01", predictedRevenue: 1080000, predictedQuantity: 99, confidenceScore: 74.5 },
+];
